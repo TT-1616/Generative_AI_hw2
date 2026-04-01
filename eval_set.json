@@ -1,0 +1,80 @@
+[
+  {
+    "id": "normal_refund_delay",
+    "category": "normal",
+    "input": {
+      "customer_name": "Jordan Lee",
+      "customer_email": "jordan@example.com",
+      "subject": "Checking on refund timeline",
+      "message": "Hi, I returned the wireless keyboard five days ago and the tracking page says it was delivered to your warehouse on Monday. I still have not seen the refund on my credit card. Can you let me know when I should expect it?",
+      "account_context": "Order #48192. Return delivered 5 days ago. Standard policy says refunds are processed within 7 business days after warehouse receipt.",
+      "policy_notes": "Do not promise an exact bank posting date. Give the normal processing window and offer to follow up if it exceeds policy."
+    },
+    "good_output_should": "Clearly explain the 7-business-day window, reassure the customer, avoid promising an exact date, and offer next steps if the refund does not appear after the policy window."
+  },
+  {
+    "id": "angry_double_charge",
+    "category": "edge",
+    "input": {
+      "customer_name": "Priya Raman",
+      "customer_email": "priya@example.com",
+      "subject": "I was charged twice",
+      "message": "This is ridiculous. I was charged twice for the same subscription renewal and nobody has replied for two days. I want one of the charges reversed immediately and I need an explanation.",
+      "account_context": "Subscription renewal on March 28. Two charges appear in billing system, but one may be an authorization hold. No prior agent response has been sent.",
+      "policy_notes": "Do not admit fault before confirming the duplicate charge. Acknowledge frustration, explain that one charge may be temporary, and state that billing will investigate."
+    },
+    "good_output_should": "Use calm empathetic language, avoid blaming or overpromising, explain the possible authorization-hold scenario, and commit to investigation with a realistic timeline."
+  },
+  {
+    "id": "outside_policy_refund",
+    "category": "edge",
+    "input": {
+      "customer_name": "Miguel Santos",
+      "customer_email": "miguel@example.com",
+      "subject": "Need a refund after 45 days",
+      "message": "I bought your annual plan 45 days ago and forgot to cancel. I barely used it. Can you make an exception and refund it?",
+      "account_context": "Annual plan activated 45 days ago. Refund policy allows cancellations within 14 days of purchase.",
+      "policy_notes": "Do not promise a refund. You may acknowledge the request, explain the published policy, and offer a downgrade or cancellation of future renewal."
+    },
+    "good_output_should": "Politely explain the 14-day policy, avoid promising an exception, and offer a practical alternative such as canceling renewal or exploring a lower-cost plan."
+  },
+  {
+    "id": "missing_context_account_lock",
+    "category": "likely_failure",
+    "input": {
+      "customer_name": "Avery Chen",
+      "customer_email": "avery@example.com",
+      "subject": "Locked out after password reset",
+      "message": "I reset my password and now I cannot get into my account before an investor demo in an hour. Please fix this ASAP.",
+      "account_context": "No verified account ownership steps completed yet. No device or security log information available.",
+      "policy_notes": "Never suggest bypassing identity verification. Ask for the approved verification steps and direct the customer to secure recovery flow."
+    },
+    "good_output_should": "Show urgency and empathy, but avoid unsafe recovery advice, request the approved verification process, and avoid pretending the issue can be fixed immediately without validation."
+  },
+  {
+    "id": "legal_threat_data_deletion",
+    "category": "likely_failure",
+    "input": {
+      "customer_name": "Sam Patel",
+      "customer_email": "sam@example.com",
+      "subject": "Delete my data now",
+      "message": "Delete all of my data immediately. If this is not done today, I will report your company and contact my lawyer.",
+      "account_context": "User requests account deletion. Jurisdiction and account verification status unknown.",
+      "policy_notes": "Do not cite laws unless provided. Acknowledge the request, explain that identity verification is required before account deletion, and escalate privacy requests to the privacy team."
+    },
+    "good_output_should": "Remain calm, avoid legal claims, explain verification and escalation clearly, and avoid promising same-day deletion without the required process."
+  },
+  {
+    "id": "feature_request_not_bug",
+    "category": "normal",
+    "input": {
+      "customer_name": "Dana Brooks",
+      "customer_email": "dana@example.com",
+      "subject": "Please add CSV export",
+      "message": "Our team really needs CSV export from the dashboard. Right now we have to copy everything manually. Is this on your roadmap?",
+      "account_context": "No CSV export feature currently available. Product team accepts feature requests through internal tracker. No committed launch date.",
+      "policy_notes": "Do not promise roadmap dates. Thank the customer, summarize the request, and offer a workaround if available."
+    },
+    "good_output_should": "Acknowledge the request, avoid inventing a roadmap date, offer a workaround if possible, and note that feedback will be shared with the product team."
+  }
+]
