@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,11 @@ from urllib import error, parse, request
 ROOT = Path(__file__).resolve().parent
 EVAL_PATH = ROOT / "eval_set.json"
 OUTPUT_DIR = ROOT / "outputs"
-DEFAULT_MODEL = "gemini-2.0-flash"
+DEFAULT_PROVIDER = "auto"
+DEFAULT_MODELS = {
+    "gemini": "gemini-2.5-flash-lite",
+    "openai": "gpt-4o-mini",
+}
 
 
 PROMPTS = {
@@ -90,13 +95,19 @@ def call_gemini(model: str, prompt: str, case_text: str) -> str:
         f"{model}:generateContent?key={parse.quote(api_key)}"
     )
     payload = {
+        "system_instruction": {
+            "parts": [
+                {
+                    "text": prompt,
+                }
+            ]
+        },
         "contents": [
             {
                 "role": "user",
                 "parts": [
                     {
                         "text": (
-                            f"{prompt}\n\n"
                             "Draft the response for this support case.\n\n"
                             f"{case_text}"
                         )
@@ -105,17 +116,84 @@ def call_gemini(model: str, prompt: str, case_text: str) -> str:
             }
         ],
         "generationConfig": {
-            "temperature": 0.4,
+            "temperature": 0.2,
             "topP": 0.9,
-            "maxOutputTokens": 500,
+            "maxOutputTokens": 700,
         },
+    }
+
+    last_response_json: dict[str, Any] | None = None
+    for attempt in range(2):
+        body = json.dumps(payload).encode("utf-8")
+        req = request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with request.urlopen(req, timeout=60) as resp:
+                response_json = json.loads(resp.read().decode("utf-8"))
+        except error.HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"Gemini API HTTP error {exc.code}: {details}") from exc
+        except error.URLError as exc:
+            raise RuntimeError(f"Network error while calling Gemini API: {exc}") from exc
+
+        last_response_json = response_json
+        try:
+            output_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"Unexpected Gemini response: {response_json}") from exc
+
+        if len(output_text.split()) >= 40 and "Reply:" in output_text:
+            return output_text
+
+        if attempt == 0:
+            payload["contents"][0]["parts"][0]["text"] += (
+                "\n\nThe previous answer was incomplete. Return a full response with "
+                "Subject, Reply, and Internal review note sections."
+            )
+            time.sleep(2)
+
+    raise RuntimeError(f"Gemini returned an incomplete response: {last_response_json}")
+
+
+def call_openai(model: str, prompt: str, case_text: str) -> str:
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "Missing OPENAI_API_KEY. Export it in your shell before running the app."
+        )
+
+    url = "https://api.openai.com/v1/chat/completions"
+    payload = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": prompt,
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Draft the response for this support case.\n\n"
+                    f"{case_text}"
+                ),
+            },
+        ],
+        "temperature": 0.4,
     }
 
     body = json.dumps(payload).encode("utf-8")
     req = request.Request(
         url,
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
         method="POST",
     )
 
@@ -124,14 +202,50 @@ def call_gemini(model: str, prompt: str, case_text: str) -> str:
             response_json = json.loads(resp.read().decode("utf-8"))
     except error.HTTPError as exc:
         details = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Gemini API HTTP error {exc.code}: {details}") from exc
+        raise RuntimeError(f"OpenAI API HTTP error {exc.code}: {details}") from exc
     except error.URLError as exc:
-        raise RuntimeError(f"Network error while calling Gemini API: {exc}") from exc
+        raise RuntimeError(f"Network error while calling OpenAI API: {exc}") from exc
 
     try:
-        return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return response_json["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError) as exc:
-        raise RuntimeError(f"Unexpected Gemini response: {response_json}") from exc
+        raise RuntimeError(f"Unexpected OpenAI response: {response_json}") from exc
+
+
+def resolve_provider(provider: str) -> str:
+    if provider != "auto":
+        return provider
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    if os.environ.get("GEMINI_API_KEY"):
+        return "gemini"
+    raise RuntimeError(
+        "No API key found. Set OPENAI_API_KEY or GEMINI_API_KEY before running the app."
+    )
+
+
+def generate_output(
+    provider: str, model: str | None, prompt_version: str, case: dict[str, Any]
+) -> tuple[str, str]:
+    resolved_provider = resolve_provider(provider)
+    resolved_model = model or DEFAULT_MODELS[resolved_provider]
+    case_text = format_case(case)
+    prompt = PROMPTS[prompt_version]
+
+    if resolved_provider == "openai":
+        output_text = call_openai(
+            model=resolved_model,
+            prompt=prompt,
+            case_text=case_text,
+        )
+    else:
+        output_text = call_gemini(
+            model=resolved_model,
+            prompt=prompt,
+            case_text=case_text,
+        )
+
+    return resolved_provider, resolved_model, output_text
 
 
 def save_output(case_id: str, prompt_version: str, model: str, output_text: str) -> Path:
@@ -183,6 +297,12 @@ def parse_args() -> argparse.Namespace:
         help="Run a single case ID from eval_set.json. If omitted, the first case is used.",
     )
     parser.add_argument(
+        "--provider",
+        default=DEFAULT_PROVIDER,
+        choices=["auto", "gemini", "openai"],
+        help="LLM provider to use. Defaults to auto-detect based on available API keys.",
+    )
+    parser.add_argument(
         "--prompt-version",
         default="v2",
         choices=sorted(PROMPTS.keys()),
@@ -190,8 +310,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help="Gemini model name to call.",
+        help="Optional model override for the selected provider.",
     )
     parser.add_argument(
         "--run-eval",
@@ -211,18 +330,33 @@ def find_case(cases: list[dict[str, Any]], case_id: str | None) -> dict[str, Any
     raise SystemExit(f"Unknown case_id '{case_id}'. Available cases: {available}")
 
 
-def run_single(case: dict[str, Any], prompt_version: str, model: str) -> None:
-    case_text = format_case(case)
-    output_text = call_gemini(model=model, prompt=PROMPTS[prompt_version], case_text=case_text)
-    saved_path = save_output(case["id"], prompt_version, model, output_text)
-    print(render_result(case, prompt_version, model, output_text))
+def run_single(
+    case: dict[str, Any], provider: str, prompt_version: str, model: str | None
+) -> None:
+    resolved_provider, resolved_model, output_text = generate_output(
+        provider=provider,
+        model=model,
+        prompt_version=prompt_version,
+        case=case,
+    )
+    saved_path = save_output(
+        case["id"],
+        prompt_version,
+        f"{resolved_provider}:{resolved_model}",
+        output_text,
+    )
+    print(render_result(case, prompt_version, f"{resolved_provider}:{resolved_model}", output_text))
     print(f"\nSaved output to: {saved_path}")
 
 
-def run_eval(cases: list[dict[str, Any]], prompt_version: str, model: str) -> None:
+def run_eval(
+    cases: list[dict[str, Any]], provider: str, prompt_version: str, model: str | None
+) -> None:
     for index, case in enumerate(cases, start=1):
         print(f"\nRunning case {index}/{len(cases)}: {case['id']}", file=sys.stderr)
-        run_single(case, prompt_version, model)
+        run_single(case, provider, prompt_version, model)
+        if index < len(cases) and resolve_provider(provider) == "gemini":
+            time.sleep(12)
 
 
 def main() -> None:
@@ -230,11 +364,11 @@ def main() -> None:
     cases = load_cases()
 
     if args.run_eval:
-        run_eval(cases, args.prompt_version, args.model)
+        run_eval(cases, args.provider, args.prompt_version, args.model)
         return
 
     case = find_case(cases, args.case_id)
-    run_single(case, args.prompt_version, args.model)
+    run_single(case, args.provider, args.prompt_version, args.model)
 
 
 if __name__ == "__main__":

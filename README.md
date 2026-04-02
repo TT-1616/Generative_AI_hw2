@@ -21,8 +21,14 @@ This project builds and evaluates a simple GenAI workflow for drafting first-pas
 
 ## How To Run
 
-1. Create a Gemini API key in Google AI Studio.
-2. Set your API key in the terminal:
+1. Create either an OpenAI API key or a Gemini API key.
+2. Set one API key in the terminal:
+
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+```
+
+Or, if you prefer Gemini:
 
 ```bash
 export GEMINI_API_KEY="your_api_key_here"
@@ -31,20 +37,20 @@ export GEMINI_API_KEY="your_api_key_here"
 3. Run one case with the final prompt:
 
 ```bash
-python3 app.py --case-id normal_refund_delay --prompt-version v2
+python3 app.py --provider gemini --case-id normal_refund_delay --prompt-version v2
 ```
 
 4. Run the whole evaluation set:
 
 ```bash
-python3 app.py --run-eval --prompt-version v2
+python3 app.py --provider gemini --run-eval --prompt-version v2
 ```
 
 Outputs are printed to the terminal and saved in the `outputs/` folder.
 
 ## Recommended Model
 
-The prototype defaults to `gemini-2.0-flash` because it is fast, inexpensive, and strong enough for structured drafting tasks.
+The prototype supports both OpenAI and Gemini. If no model is specified, it defaults to `gpt-4o-mini` for OpenAI and `gemini-2.5-flash-lite` for Gemini.
 
 ## Human Review Boundary
 
@@ -55,4 +61,3 @@ The generated reply should be treated as a draft only. A human should review any
 Add your final walkthrough video link here before submission:
 
 - Video: `PASTE_YOUR_UNLISTED_VIDEO_LINK_HERE`
-
