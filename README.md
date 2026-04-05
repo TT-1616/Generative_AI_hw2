@@ -60,4 +60,4 @@ The generated reply should be treated as a draft only. A human should review any
 
 Add your final walkthrough video link here before submission:
 
-- Video: `PASTE_YOUR_UNLISTED_VIDEO_LINK_HERE`
+- Video: https://youtu.be/SRrK1lNxgTc
